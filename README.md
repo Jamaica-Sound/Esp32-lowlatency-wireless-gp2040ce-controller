@@ -1,9 +1,9 @@
 # Esp32-lowlatency-wireless-gp2040ce-controller
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Low-latency ESP32 custom wireless controller using ESP‑NOW with Master/Slave scripts for UART output to the forked [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) firmware.
+Low-latency ESP32 custom wireless controller using ESP‑NOW with Master/Slave scripts for UART output to the forked [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) Raspberry Pi Pico firmware.
 
-First of all please forgive my complete lack of experience in coding, I am totally a newbie. The code is not optimized both in terms of formatting and logic and of course is still under development. Any suggestions or feedback would be highly appreciated especially regarding the latency performance.
+The code is not optimized both in terms of formatting and logic and of course is still under development. Any suggestions or feedback would be highly appreciated especially regarding the latency performance.
 
 That said this project enables espnow wireless communication between a **Master** ESP32 (connected to joysticks, buttons, and analog peripherals) and a **Slave** ESP32, which forwards the input data via UART to a **Raspberry Pi Pico** running the **GP2040-CE-UART** firmware.
 
