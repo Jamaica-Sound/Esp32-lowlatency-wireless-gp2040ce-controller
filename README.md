@@ -65,6 +65,7 @@ Both Master and Slave support **manual** and **automatic** configurations. If ma
 |-----------|------|----------------|-------------|
 | `manualUartTxPin` | `int` | `-1` | GPIO pin used for UART TX (to Pico). If `-1`, automatic pin scan is performed. |
 | `manualUartRxPin` | `int` | `-1` | GPIO pin used for UART RX (from Pico). If `-1`, automatic pin scan is performed. |
+| `manualUartBaud` | `int` | `-1` | Baudrate for UART communication (see accepted values). If `-1`, the baudrate will be set automatically by the handshake with the other device connected (Pico with [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART)). |
 | `manualPeerMac` | `uint8_t[6]` | `{0x00,0x00,0x00,0x00,0x00,0x00}` | MAC address of the Master to pair with. If all zeros, automatic pairing is performed. |
 | `manualChannel` | `int8_t` | `-1` | Wi‑Fi channel (1‑13). If `-1`, the Slave follows the channel chosen by the Master during pairing. |
 
@@ -72,11 +73,11 @@ Both Master and Slave support **manual** and **automatic** configurations. If ma
 - **UART Pin Scan**: Detects which GPIO pins are connected to the Pico's UART (by trying to send a handshake and waiting for a response).
 - **Pairing**: Listens for pairing requests from the Master and responds with its MAC address.
 - **Channel Synchronisation**: Once paired on the default channel, the Slave switches to the channel accordingly to the configuration.
-- **baudrate selection**: The baudrate is configured in the web configuration page of the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) addon and then is exchanged with the slave.
+- **Baudrate Selection**: The baudrate is configured in the web configuration page of the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) addon and then is exchanged with the slave.
 
 ## Hardware Tested
 
-- **2x ESP32‑S3-N16R8** with 44 pins and dual USB. The code should work on other ESP32 variants (e.g., ESP32‑WROOM, ESP32‑C3), but this is untested.
+- **2x ESP32‑S3-N16R8** dual USB. The code should work on other ESP32 variants, but this is untested.
 - **1x Raspberry Pi Pico** (or similar) running the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) firmware.
 - Buttons, joysticks, and analog peripherals to connect to the Master.
 - USB cables for power and programming.
