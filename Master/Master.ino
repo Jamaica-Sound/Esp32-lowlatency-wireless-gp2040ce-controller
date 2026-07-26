@@ -37,8 +37,8 @@ uint8_t manualPeerMac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 // ===============================================================================================
 int8_t manualChannel = -1;
 uint32_t manualPacingUs = 0;
-const uint32_t testDurationMs = 1500;
-const uint32_t pktIntervalUs = 500;
+uint32_t testDurationMs = 1500;
+uint32_t pktIntervalUs = 500;
 
 static bool runtimeStarted = false;
 

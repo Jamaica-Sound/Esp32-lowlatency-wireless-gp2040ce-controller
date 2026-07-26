@@ -192,38 +192,39 @@ void performHandshake() {
 
             if (baudCmd.startsWith("BAUD=")) {
                 uint32_t newBaud = baudCmd.substring(5).toInt();
+                // Sempre il baudricevuto dal Pico, nessun override manuale
                 const uint32_t validBauds[] = {9600,19200,38400,57600,115200,230400,460800,921600,1000000,1500000,2000000,3000000,4000000};
                 bool valid = false;
                 for (uint32_t b : validBauds) {
                     if (newBaud == b) { valid = true; break; }
                 }
-                if (valid) {
-                    Serial.printf("Switching to baudrate: %d\n", newBaud);
-                    unsigned long ackStart = millis();
-                    while (millis() - ackStart < 500) {
-                        Serial2.println("baudrate received");
-                        delay(50);
-                    }
+                if (!valid) {
+                    Serial.println("Invalid baudrate, sending unknown");
+                    Serial2.println("baudrate unknown");
+                    handshakeDone = false;
                     Serial2.end();
-                    Serial2.begin(newBaud, SERIAL_8N1, rxEsp, txEsp);
-                    uartBaud = newBaud;
-
-                    Preferences prefsCfg;
-                    prefsCfg.begin("uart_config", false);
-                    prefsCfg.putUInt("baud", uartBaud);
-                    prefsCfg.putInt("rx", rxEsp);
-                    prefsCfg.putInt("tx", txEsp);
-                    prefsCfg.end();
-
-                    handshakeDone = true;
                     return;
-                } else {
-                        Serial.println("Invalid baudrate, sending unknown");
-                        Serial2.println("baudrate unknown");
-                        handshakeDone = false;
-                        Serial2.end();
-                        return;
                 }
+
+                Serial.printf("Switching to baudrate: %d\n", newBaud);
+                unsigned long ackStart = millis();
+                while (millis() - ackStart < 500) {
+                    Serial2.println("baudrate received");
+                    delay(50);
+                }
+                Serial2.end();
+                Serial2.begin(newBaud, SERIAL_8N1, rxEsp, txEsp);
+                uartBaud = newBaud;
+
+                Preferences prefsCfg;
+                prefsCfg.begin("uart_config", false);
+                prefsCfg.putUInt("baud", uartBaud);
+                prefsCfg.putInt("rx", rxEsp);
+                prefsCfg.putInt("tx", txEsp);
+                prefsCfg.end();
+
+                handshakeDone = true;
+                return;
             } else {
                 Serial.println("No BAUD command, handshake failed");
                 rxEsp = -1;
@@ -282,6 +283,9 @@ void uartScanBegin() {
   int nvsRx = prefsCfg.getInt("rx", -1);
   int nvsTx = prefsCfg.getInt("tx", -1);
   uint32_t nvsBaud = prefsCfg.getUInt("baud", FIXED_BAUD);
+  prefsCfg.end();
+
+  // Gestione pin manuali (come prima)
   bool manualPinsConfigured = (manualUartRxPin >= 0 && manualUartTxPin >= 0);
   bool manualMatchesNvs = (manualPinsConfigured && nvsRx == manualUartRxPin && nvsTx == manualUartTxPin);
   bool manualDiffersFromNvs = (manualPinsConfigured && (nvsRx != manualUartRxPin || nvsTx != manualUartTxPin));
@@ -299,6 +303,22 @@ void uartScanBegin() {
     nvsRx = manualUartRxPin;
     nvsTx = manualUartTxPin;
     uartBaud = FIXED_BAUD;
+  }
+
+  // --- AGGIUNTA: se manualUartBaud è impostato e diverso da NVS, lo scriviamo come fallback ---
+  // Questo agisce solo se non c'è handshake; se poi arriva handshake, verrà sovrascritto.
+  if (manualUartBaud != -1) {
+      uint32_t newBaud = (uint32_t)manualUartBaud;
+      if (nvsBaud != newBaud) {
+          Preferences prefsWrite;
+          prefsWrite.begin("uart_config", false);
+          prefsWrite.putUInt("baud", newBaud);
+          // Non modifichiamo rx/tx
+          prefsWrite.end();
+          Serial.printf("Manual baudrate %d written to NVS as fallback (was %d)\n", newBaud, nvsBaud);
+          nvsBaud = newBaud;
+          hasBaud = true;
+      }
   }
 
   if (hasRx && hasTx && hasBaud) {
@@ -386,6 +406,7 @@ void uartScanBegin() {
 
 void uartScanLoop() {
   if (handshakeDone) {
+    // Finestra di 2 secondi per intercettare discovery dal Pico (sempre attiva)
     static unsigned long startCheck = 0;
     static bool checkPending = true;
     if (checkPending && startCheck == 0) {
