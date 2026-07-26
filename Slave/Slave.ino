@@ -7,11 +7,21 @@
 // ============================================================
 //  MANUAL UART PIN CONFIGURATION
 //  - Default value -1 = automatic UART pin scan.
-//  - If set to valid values (0..63), the scan is bypassed
+//  - If both are set to valid values (0..63), the scan is bypassed
 //    and these pins are used directly for the Pico handshake.
+//  MANUAL UART BAUD CONFIGURATION (FALLBACK)
+//  - Default value -1 = use baudrate from handshake or NVS.
+//  - If set to a valid baudrate (e.g., 115200), it is used ONLY
+//    when no handshake occurs (i.e., when pins and baud are already
+//    saved in NVS and the Pico does not request a new discovery).
+//    During an active handshake, the baudrate sent by the Pico
+//    always takes precedence.
+//  - Valid Bauds are: 9600,19200,38400,57600,115200,230400,
+//    460800,921600,1000000,1500000,2000000,3000000,4000000.
 // ============================================================
 int manualUartTxPin = -1;
 int manualUartRxPin = -1;
+int manualUartBaud = -1;
 
 // ============================================================
 //  MANUAL MAC ADDRESS CONFIGURATION

@@ -6,6 +6,7 @@ extern "C" {
 
 extern int manualUartRxPin;
 extern int manualUartTxPin;
+extern int manualUartBaud;
 
 void uartScanBegin();
 void uartScanLoop();

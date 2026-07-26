@@ -8,8 +8,8 @@
 
 extern uint8_t peerMac[6];
 extern int8_t manualChannel;
-extern const uint32_t testDurationMs;
-extern const uint32_t pktIntervalUs;
+extern uint32_t testDurationMs;
+extern uint32_t pktIntervalUs;
 
 bool channelScanActive = false;
 

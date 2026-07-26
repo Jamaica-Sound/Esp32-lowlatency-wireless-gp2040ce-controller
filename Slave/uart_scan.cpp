@@ -197,33 +197,33 @@ void performHandshake() {
                 for (uint32_t b : validBauds) {
                     if (newBaud == b) { valid = true; break; }
                 }
-                if (valid) {
-                    Serial.printf("Switching to baudrate: %d\n", newBaud);
-                    unsigned long ackStart = millis();
-                    while (millis() - ackStart < 500) {
-                        Serial2.println("baudrate received");
-                        delay(50);
-                    }
+                if (!valid) {
+                    Serial.println("Invalid baudrate, sending unknown");
+                    Serial2.println("baudrate unknown");
+                    handshakeDone = false;
                     Serial2.end();
-                    Serial2.begin(newBaud, SERIAL_8N1, rxEsp, txEsp);
-                    uartBaud = newBaud;
-
-                    Preferences prefsCfg;
-                    prefsCfg.begin("uart_config", false);
-                    prefsCfg.putUInt("baud", uartBaud);
-                    prefsCfg.putInt("rx", rxEsp);
-                    prefsCfg.putInt("tx", txEsp);
-                    prefsCfg.end();
-
-                    handshakeDone = true;
                     return;
-                } else {
-                        Serial.println("Invalid baudrate, sending unknown");
-                        Serial2.println("baudrate unknown");
-                        handshakeDone = false;
-                        Serial2.end();
-                        return;
                 }
+
+                Serial.printf("Switching to baudrate: %d\n", newBaud);
+                unsigned long ackStart = millis();
+                while (millis() - ackStart < 500) {
+                    Serial2.println("baudrate received");
+                    delay(50);
+                }
+                Serial2.end();
+                Serial2.begin(newBaud, SERIAL_8N1, rxEsp, txEsp);
+                uartBaud = newBaud;
+
+                Preferences prefsCfg;
+                prefsCfg.begin("uart_config", false);
+                prefsCfg.putUInt("baud", uartBaud);
+                prefsCfg.putInt("rx", rxEsp);
+                prefsCfg.putInt("tx", txEsp);
+                prefsCfg.end();
+
+                handshakeDone = true;
+                return;
             } else {
                 Serial.println("No BAUD command, handshake failed");
                 rxEsp = -1;
@@ -282,6 +282,8 @@ void uartScanBegin() {
   int nvsRx = prefsCfg.getInt("rx", -1);
   int nvsTx = prefsCfg.getInt("tx", -1);
   uint32_t nvsBaud = prefsCfg.getUInt("baud", FIXED_BAUD);
+  prefsCfg.end();
+
   bool manualPinsConfigured = (manualUartRxPin >= 0 && manualUartTxPin >= 0);
   bool manualMatchesNvs = (manualPinsConfigured && nvsRx == manualUartRxPin && nvsTx == manualUartTxPin);
   bool manualDiffersFromNvs = (manualPinsConfigured && (nvsRx != manualUartRxPin || nvsTx != manualUartTxPin));
@@ -299,6 +301,19 @@ void uartScanBegin() {
     nvsRx = manualUartRxPin;
     nvsTx = manualUartTxPin;
     uartBaud = FIXED_BAUD;
+  }
+
+  if (manualUartBaud != -1) {
+      uint32_t newBaud = (uint32_t)manualUartBaud;
+      if (nvsBaud != newBaud) {
+          Preferences prefsWrite;
+          prefsWrite.begin("uart_config", false);
+          prefsWrite.putUInt("baud", newBaud);
+          prefsWrite.end();
+          Serial.printf("Manual baudrate %d written to NVS as fallback (was %d)\n", newBaud, nvsBaud);
+          nvsBaud = newBaud;
+          hasBaud = true;
+      }
   }
 
   if (hasRx && hasTx && hasBaud) {
