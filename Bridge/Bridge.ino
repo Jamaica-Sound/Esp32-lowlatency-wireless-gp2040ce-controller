@@ -26,7 +26,7 @@ int manualUartBaud = -1;
 // ============================================================
 //  MANUAL MAC ADDRESS CONFIGURATION
 //  - If left as {0x00,0x00,0x00,0x00,0x00,0x00} = automatic pairing.
-//  - If set with a valid MAC address (e.g., the master's MAC),
+//  - If set with a valid MAC address (e.g., the Controller's MAC),
 //    automatic pairing is bypassed and the specified MAC will be used.
 //  - Broadcast {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF} is accepted and it's faster.
 //  - Example: uint8_t manualPeerMac[6] = {0xA1,0xB2,0xC3,0xD4,0xE5,0xF6}.
