@@ -54,6 +54,7 @@ static TaskHandle_t txTaskHandle = NULL;
 static SemaphoreHandle_t txSemaphore = NULL;
 static esp_timer_handle_t pacingTimer = NULL;
 static const unsigned long CONFIG_INTERVAL_MS = 1000;
+volatile uint32_t packetCounter = 0;
 
 static void txTask(void *pvParameters);
 static void pacingCallback(void *arg);
@@ -99,7 +100,7 @@ bool runtimeInit() {
     sharedBuffers[1].digitalCount = digitalCount;
     sharedBuffers[1].validAnalogCount = 0;
 
-    adc_digi_pattern_config_t patterns[6] = {};
+    adc_digi_pattern_config_t patterns[10] = {};
     memset(adcChannelMap, -1, sizeof(adcChannelMap));
     int validPatterns = 0;
     for (int i = 0; i < analogCount; i++) {
@@ -116,16 +117,18 @@ bool runtimeInit() {
     validAnalogCount = validPatterns;
 
     if (validAnalogCount > 0) {
+        uint32_t frameSize = validPatterns * sizeof(adc_digi_output_data_t);
+
         adc_continuous_handle_cfg_t adcConfig = {
-            .max_store_buf_size = 128,
-            .conv_frame_size = 64,
+            .max_store_buf_size = frameSize * 4,
+            .conv_frame_size = frameSize,
         };
         ESP_ERROR_CHECK(adc_continuous_new_handle(&adcConfig, &adcHandle));
 
         adc_continuous_config_t digCfg = {};
         digCfg.pattern_num   = validPatterns;
         digCfg.adc_pattern   = patterns;
-        digCfg.sample_freq_hz = 2000;
+        digCfg.sample_freq_hz = 2000 * validPatterns;
         digCfg.conv_mode      = ADC_CONV_SINGLE_UNIT_1;
         digCfg.format         = ADC_DIGI_OUTPUT_FORMAT_TYPE2;
         ESP_ERROR_CHECK(adc_continuous_config(adcHandle, &digCfg));
@@ -267,6 +270,18 @@ void runtimeLoop() {
     currentWriteBuffer = (currentWriteBuffer == 0) ? 1 : 0;
     currentReadBuffer = (currentReadBuffer == 0) ? 1 : 0;
     portEXIT_CRITICAL(&bufferMux);
+
+    static unsigned long lastDebugPrint = 0;
+    static uint32_t lastPacketCounter = 0;
+    unsigned long nowDbg = millis();
+    if (nowDbg - lastDebugPrint >= 5000) {
+        uint32_t count = packetCounter;
+        Serial.print("TX rate: ");
+        Serial.print((count - lastPacketCounter) / 5);
+        Serial.println(" pkt/s");
+        lastPacketCounter = count;
+        lastDebugPrint = nowDbg;
+    }
 }
 
 static void pacingCallback(void *arg) {
@@ -277,8 +292,6 @@ static void pacingCallback(void *arg) {
 
 static void txTask(void *pvParameters) {
     uint32_t lastConfigMillis = millis();
-    unsigned long lastDebugPrint = 0;
-    uint32_t packetCounter = 0;
 
     while (1) {
         if (xSemaphoreTake(txSemaphore, portMAX_DELAY) == pdTRUE) {
@@ -354,13 +367,6 @@ auto cfgErr = esp_now_send(
     lastConfigMillis = now;
 }
 
-             if (now - lastDebugPrint >= 5000) {
-                Serial.print("TX rate: ");
-                Serial.print(packetCounter / 5);
-                Serial.println(" pkt/s");
-                packetCounter = 0;
-                lastDebugPrint = now;
-            } 
         }
     }
 }
