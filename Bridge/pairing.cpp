@@ -116,6 +116,7 @@ static void OnDataRecv(const esp_now_recv_info *info, const uint8_t *data, int l
 void pairingBegin() {
 
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     delay(100);
     esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
     delay(10);

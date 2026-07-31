@@ -156,25 +156,16 @@ bool isPaired() {
 
 void pairingBegin() {
     Serial.println("\n=== PAIRING ===");
-
     Serial.println("PAIR 1");
-
     WiFi.mode(WIFI_STA);
-
+    WiFi.setSleep(false);
     Serial.println("PAIR 2");
-
     WiFi.disconnect(true, true);
-
     Serial.println("PAIR 3");
-
     delay(100);
-
     yield();
-
     Serial.println("PAIR 4");
-
     esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-
     Serial.println("PAIR 5");
 
     if (esp_now_init() != ESP_OK) {

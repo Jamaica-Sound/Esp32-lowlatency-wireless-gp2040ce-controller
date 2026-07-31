@@ -15,7 +15,6 @@ TaskHandle_t uartTaskHandle = nullptr;
 
 volatile bool runtimePacketReady = false;
 volatile bool configPacketReady = false;
-volatile uint32_t runtimeCount = 0;
 volatile uint32_t uartTxCount = 0;
 volatile int minFreeTx = 999999;
 volatile uint32_t configTxCount = 0;
@@ -299,7 +298,7 @@ void runtimeStart() {
         "uartRuntime",
         8192,
         NULL,
-        1,
+        configMAX_PRIORITIES - 1,
         &uartTaskHandle,
         1
     );
@@ -316,19 +315,15 @@ void runtimeLoop() {
 
     if (now - lastPrint >= 5000) {
 
-        uint32_t rxNow = runtimeCount;
         uint32_t runtimeTxNow = uartTxCount;
         uint32_t configTxNow = configTxCount;
 
         Serial.printf(
-        "[STATS 5s] ESPNOW CRC OK=%lu UART_RUNTIME_TX=%lu UART_CONFIG_TX=%lu MINFREE=%d\n",
-    (unsigned long)(rxNow - lastRuntimeRx),
+        "[STATS 5s] ESPNOW UART_RUNTIME_TX=%lu UART_CONFIG_TX=%lu MINFREE=%d\n",
     (unsigned long)(runtimeTxNow - lastRuntimeTx),
     (unsigned long)(configTxNow - lastConfigTx),
     minFreeTx
         );
-
-        lastRuntimeRx = rxNow;
         lastRuntimeTx = runtimeTxNow;
         lastConfigTx = configTxNow;
         lastPrint = now;
