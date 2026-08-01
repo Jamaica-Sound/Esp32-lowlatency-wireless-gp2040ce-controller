@@ -1,149 +1,176 @@
 # Esp32-lowlatency-wireless-gp2040ce-controller
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/platform-ESP32-blue.svg)](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller)
+[![Firmware](https://img.shields.io/badge/pico%20firmware-GP2040--CE--UART-informational.svg)](https://github.com/Jamaica-Sound/GP2040-CE-UART)
+[![Wiki](https://img.shields.io/badge/docs-wiki-brightgreen.svg)](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki)
 
-Low-latency ESP32 custom wireless controller using ESP‑NOW with Controller/Bridge scripts for UART output to the forked [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) Raspberry Pi Pico firmware.
+A low-latency, wireless input bridge for the Raspberry Pi Pico running **[GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART)**. Two ESP32 boards replace the physical wiring between your buttons/joysticks and the Pico with an **ESP-NOW** radio link — one board reads the peripherals, the other forwards the data to the Pico over UART, which then appears to the host exactly as a standard GP2040-CE controller.
 
-The code is not optimized both in terms of formatting and logic and of course is still under development. Any suggestions or feedback would be highly appreciated especially regarding the latency performance.
+> **Status:** actively developed. Digital and analog inputs work reliably; triggers and rotary encoders work but need further testing, and their calibration through the GP2040-CE-UART web configurator is not yet functional. Feedback on latency performance is especially welcome.
 
-That said this project enables espnow wireless communication between a **Controller** ESP32 (connected to joysticks, buttons, and analog peripherals) and a **Bridge** ESP32, which forwards the input data via UART to a **Raspberry Pi Pico** running the **GP2040-CE-UART** firmware.
+## Table of Contents
 
-Digital and analog inputs work well. The triggers and rotary encoders work but I need to do further testing (calibrations on GP2040-CE webconfig isn't working).
+- [How It Works](#how-it-works)
+- [Protocol Overview](#protocol-overview)
+- [Key Characteristics](#key-characteristics)
+- [Hardware](#hardware)
+- [Software Requirements](#software-requirements)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Documentation / Wiki](#documentation--wiki)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [Support](#support)
+- [License](#license)
+- [Credits](#credits)
 
 ## How It Works
 
-The system is composed of two ESP32 units:
+```mermaid
+flowchart LR
+    P["Buttons, D-pad,<br/>joysticks, triggers"] --> C["Controller (ESP32)"]
+    C -- "ESP-NOW, wireless" --> B["Bridge (ESP32)"]
+    B -- "UART" --> PICO["Raspberry Pi Pico<br/>(GP2040-CE-UART)"]
+    PICO -- "USB" --> HOST["PC / Console"]
+```
 
-- **Controller**: Reads and sends digital and analog inputs from connected peripherals via ESP‑NOW to the Bridge.
-- **Bridge**: Receives the data via ESP‑NOW and forwards it over a UART connection to a Raspberry Pi Pico (or any other device) running the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) firmware.
+The project is made of two independent Arduino sketches:
+
+- **`Controller/Controller.ino`** — wired to your buttons, D-pad and analog inputs. Samples them continuously and streams the state to the Bridge over ESP-NOW.
+- **`Bridge/Bridge.ino`** — wired via UART to the Raspberry Pi Pico. Receives the ESP-NOW stream and forwards it, byte for byte, onto the UART line.
+
+Both sides are designed to be **plug-and-play**: pin mapping, UART baud rate, ESP-NOW peer, Wi-Fi channel and packet pacing can each be left on automatic discovery, or hard-coded manually for a faster, deterministic boot. See [Configuration](#configuration) below.
 
 ## Protocol Overview
 The communication protocol is based on a custom, low‑latency packet structure defined in `protocol_v2.h`, the Controller and Bridge exchange two types of packets over ESP‑NOW:
 
 1. **Configuration Packets**
-   - Contain the effective count and the pin number of up to 64 digital inputs and analog axes configured or detected.
+   - Contain the effective count and the pin number of **up to 64 digital inputs and analog axes** configured or detected.
    - Sent every second from Controller to Bridge via espnow with Sync and crc.
    - For 16 buttons → 16 digital inputs + 1 D-pad → 4 digital inputs + 2 analog joystick → 4 analog axes = 31 bytes per packet.
   
 2. **Runtime Packets**  
-   - Contain the values detected of up to 64 digital inputs and analog axes.
+   - Contain the values detected of **up to 64 digital inputs and analog axes**.
    - Sent periodically from Controller to Bridge via espnow at a configurable or best automatic rate with Sync and crc.
    - For 16 buttons → 16 digital inputs + 1 D-pad → 4 digital inputs + 2 analog joystick → 4 analog axes = 21 bytes per packet.
 
-All packets are CRC‑protected. The Bridge verifies the CRC before forwarding data to the Pico via UART, ensuring data integrity.
+All packets are CRC‑protected. The Bridge verifies the header before forwarding data to the Pico via UART that verifies the CRC, ensuring data integrity.
 
-The configuration packet are sent every second just to be sure that it is received by the pico in a short time.
+The configuration packets are sent every second just to be sure that it is received by the pico in a short time.
 
-The runtime packet good rate with a paired MAC address (not broadcast) is 800pkt/s - 1 every 1,25ms.
+A good runtime packet rate with a paired MAC address (not broadcast) is 800pkt/s - 1 every 1.25ms, but **the rate can be 1.5 times faster if broadcast MAC is used.**
 
-**The rate can be 1.5 times faster if broadcast MAC is used.**
+## Key Characteristics
 
-## Configuration Parameters
+- **Custom low-overhead binary protocol (`JSV2`)** over ESP-NOW — a compact configuration packet (pin layout) plus a compact runtime packet (input state), both CRC16-protected, sized dynamically to the number of inputs actually in use (as few as ~20 bytes for a typical layout). Full byte-level breakdown in the [Communication Protocol](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Communication-Protocol) wiki page.
+- **Latency-oriented architecture** — continuous input sampling is decoupled from radio transmission via a hardware `esp_timer` and a dedicated, highest-priority FreeRTOS task on the Controller; the Bridge hands off received data to its UART task through a direct task notification rather than polling. Detailed in [Runtime Data Pipeline](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Runtime-Data-Pipeline).
+- **Fully automatic first boot** — both boards can autonomously discover their GPIO wiring (works best with digital buttons that have a pull‑up resistor), find and pair with each other, pick the cleanest Wi-Fi channel, auto-tune their packet rate, and (on the Bridge) negotiate a UART baud rate with the Pico — no configuration required beyond flashing the sketches.
+- **Manual override for everything automatic** — every discovered parameter can instead be hard-coded for a near-instant, deterministic boot. See [Configuration Reference](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Configuration-Reference).
+- **Persistent discovery** — once pairing, pin scanning, channel selection and UART negotiation succeed, the result is cached in flash (NVS); a normal power cycle reconnects almost instantly without repeating any scan.
+- **Optional broadcast mode** — pairing to the ESP-NOW broadcast address instead of a specific peer MAC is reported to reach up to ~1.5× the packet rate of a paired unicast link, at the cost of not being addressed to a single specific peer.
 
-Both Controller and Bridge support **manual** and **automatic** configurations. If manual parameters are left at their default values (or set to specific "auto" values), the system performs an automatic scan/negotiation.
+## Hardware
 
-### Controller Configuration (`Controller/Controller.ino`)
+- 2× **ESP32-S3-N16R8** (dual USB) — the tested reference hardware. Other (dual core) ESP32 variants are expected to work but are untested.
+- 1× **Raspberry Pi Pico** (or similar RP2040 board) running [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART).
+- Buttons, joysticks, triggers, or other peripherals wired to the Controller.
 
-| Parameter | Type | Default (Auto) | Description |
-|-----------|------|----------------|-------------|
-| `manualDigitalPins` | `String` | `""` | Comma‑separated list of GPIO pins used as digital inputs (buttons, rotary). If empty, the Controller performs an automatic pin scan during startup. Does not work with digital buttons without a resistance applied. |
-| `manualAnalogPins` | `String` | `""` | Comma‑separated list of GPIO pins used as analog inputs (joysticks, potentiometers, triggers). If empty, automatic scan. |
-| `manualPeerMac` | `uint8_t[6]` | `{0x00,0x00,0x00,0x00,0x00,0x00}` | MAC address of the Bridge to pair with. If all zeros, automatic pairing is performed. |
-| `manualChannel` | `int8_t` | `-1` | Wi‑Fi channel (1‑13). If `-1`, the Controller scans all channels to find the best one (lowest interference). If 0 use the default channel (1) for every operation. |
-| `manualPacingUs` | `uint32_t` | `0` | Interval between ESP‑NOW packets sent to Bridge in microseconds (e.g., `1250` = 800 packets/sec). If `0`, the rate is automatically calculated by the wifi scan, based on channel quality. |
-| `testDurationMs` | `uint32_t` | `1500` | Duration (in milliseconds) of each channel scan test. |
-| `pktIntervalUs` | `uint32_t` | `500` | Interval between packets during channel scanning (in microseconds). |
-
-**Automatic operations on Controller:**
-- **Pin Scan**: Detects which pins have buttons connected (pull‑up with a resistor) or analog devices. Works best with digital buttons that have a pull‑up resistor; analog scan works out‑of‑the‑box.
-- **Pairing**: Broadcasts a pairing request and waits for the Bridge to respond and then an handshake is done.
-- **Wi‑Fi Channel Scan**: Tests each channel (1‑13) by sending test packets to measure the reception rate on the Bridge, then selects the best one.
-- **Pacing Auto‑tuning**: Adjusts the packet send rate based on the measured channel quality to minimize latency without overloading the link.
-
-### Bridge Configuration (`Bridge/Bridge.ino`)
-
-| Parameter | Type | Default (Auto) | Description |
-|-----------|------|----------------|-------------|
-| `manualUartTxPin` | `int` | `-1` | GPIO pin used for UART TX (to Pico). If `-1`, automatic pin scan is performed. |
-| `manualUartRxPin` | `int` | `-1` | GPIO pin used for UART RX (from Pico). If `-1`, automatic pin scan is performed. |
-| `manualUartBaud` | `int` | `-1` | Baudrate for UART communication (see accepted values). If `-1`, the baudrate will be set automatically by the handshake with the other device connected (Pico with [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART)). |
-| `manualPeerMac` | `uint8_t[6]` | `{0x00,0x00,0x00,0x00,0x00,0x00}` | MAC address of the Controller to pair with. If all zeros, automatic pairing is performed. |
-| `manualChannel` | `int8_t` | `-1` | Wi‑Fi channel (1‑13). If `-1`, the Bridge follows the channel chosen by the Controller during pairing. |
-
-**Automatic operations on Bridge:**
-- **UART Pin Scan**: Detects which GPIO pins are connected to the Pico's UART (by trying to send a handshake and waiting for a response).
-- **Pairing**: Listens for pairing requests from the Controller and responds with its MAC address.
-- **Channel Synchronisation**: Once paired on the default channel, the Bridge switches to the channel accordingly to the configuration.
-- **Baudrate Selection**: The baudrate is configured in the web configuration page of the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) addon and then is exchanged with the Bridge.
-
-## Hardware Tested
-
-- **2x ESP32‑S3-N16R8** dual USB. The code should work on other ESP32 variants, but this is untested.
-- **1x Raspberry Pi Pico** (or similar) running the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) firmware.
-- Buttons, joysticks, and analog peripherals to connect to the Controller.
-- USB cables for power and programming.
-
-## Hardware on the bench
-- T-PicoC3 which combine a pico and an Esp32-C3 is on the way to its tests
+Full wiring guidance, GPIO/ADC constraints and module-specific cautions: [Hardware and Wiring](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Hardware-and-Wiring).
 
 ## Software Requirements
 
-- **Arduino IDE** (used for development and upload).
-- **ESP32 Board Package** by Espressif Systems, version **3.3.8**.
-- No external libraries are required; the code uses standard ESP32 core libraries (`WiFi`, `esp_now`, `HardwareSerial`, etc.). The `esp32_adc` library might be needed for continuous ADC reading, but it is typically included in the ESP32 core.
+- Arduino IDE
+- ESP32 board package by Espressif Systems, version **3.3.8**
+- No third-party libraries — only the standard ESP32 Arduino core (`WiFi`, `esp_now`, `esp_wifi`, `Preferences`, `HardwareSerial`, the ESP-IDF continuous ADC driver, and FreeRTOS)
 
-## Installation & Setup
+## Quick Start
 
-### 1. Clone the Repository
-- git clone https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller.git
-- cd Esp32-lowlatency-wireless-gp2040ce-controller
+```bash
+git clone https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller.git
+cd Esp32-lowlatency-wireless-gp2040ce-controller
+```
 
-### 2. Configure the Controller
-- Open the Controller/Controller.ino file in the Arduino IDE and adjust any manual parameters as described in the Configuration Parameters section above.
-- Leave them at their default values to enable automatic configuration.
+1. Open `Controller/Controller.ino` in the Arduino IDE, leave the manual parameters at their defaults for full automatic setup, select your board/port, and upload.
+2. Open `Bridge/Bridge.ino`, same defaults, select board/port, upload.
+3. Power on the Bridge, then the Controller. Watch both serial monitors at **115200 baud**.
+4. On first boot, expect: a one-time pin scan and self-reboot on both boards, a UART handshake between the Bridge and the Pico, ESP-NOW pairing, and (once) a ~30–60 second Wi-Fi channel scan on the Controller. Subsequent boots skip all of this and reconnect immediately.
+5. Flash the Pico with [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART), and follow the instructions to configure it via the webconfigurator UART Input page.
 
-### 3. Configure the Bridge
-- Open the Bridge/Bridge.ino file in the Arduino IDE and adjust any manual parameters as described in the Configuration Parameters section above.
-- Leave them at their default values to enable automatic configuration.
+Full step-by-step walkthrough with expected log output at each stage: [Installation and Setup](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Installation-and-Setup).
 
-### 4. Upload the Code
-- Select the correct ESP32 board from the Tools > Board menu.
-- Select the correct port from the Tools > Port menu.
-- Click the Upload button.
-- Repeat this process for both the Controller and the Bridge.
+## Configuration
 
-### 5. Configure the Pico
-Follow the instructions in the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) page.
+Every manual/automatic switch lives as a constant at the top of the corresponding `.ino` file — there is no runtime UI.
 
-### Usage:
-- Power on both ESP32 units.
-- The Controller will scan for the best Wi‑Fi channel, pair with the Bridge, and begin sending input data.
-- The Bridge will receive the data via espnow and forward it via UART to the connected Pico.
-- Monitor the Serial Monitor (115200 baud) on both devices for debug messages and status updates.
+| Board | Parameter | Default | Purpose |
+|---|---|---|---|
+| Controller | `manualDigitalPins`, `manualAnalogPins` | `""` (auto scan) | Fixed GPIO lists instead of automatic pin discovery |
+| Controller | `manualPeerMac` | `{0x00,0x00,0x00,0x00,0x00,0x00}` (auto pairing) | Fixed Bridge MAC, or broadcast for max throughput |
+| Controller | `manualChannel` | `-1` (auto scan) | Fixed Wi-Fi channel (1–13), or `0` for channel 1 always |
+| Controller | `manualPacingUs` | `0` (auto-tuned) | Fixed microsecond interval between runtime packets |
+| Controller | `testDurationMs` | `1500` | Duration (in milliseconds) of each wifi channel scan test |
+| Controller | `pktIntervalUs` | `500` | Interval between packets during wifi channel scanning (in microseconds) |
+| Bridge | `manualUartTxPin`, `manualUartRxPin` | `-1` (auto scan) | Fixed UART pins toward the Pico |
+| Bridge | `manualUartBaud` | `-1` (auto negotiated) | Fallback baud rate |
+| Bridge | `manualPeerMac`, `manualChannel` | same as Controller | Mirror settings for the Bridge side |
 
-### Debugging:
-The code includes many serial debug messages. To view them: 
-- Open the Serial Monitor in the Arduino IDE (Tools > Serial Monitor).
-- Set the baud rate to 115200.
-- Observe the output from both the Controller and the Bridge.
+**Automatic operations on Controller:**
+- **Pin Scan**: Detects which pins have buttons connected (pull‑up with a resistor) or analog devices. Works best with digital buttons that have a pull‑up resistor; analog scan works out‑of‑the‑box.
+- **Pairing**: Broadcasts a pairing request on a default channel and waits for the Bridge to respond and then an handshake is done.
+- **Wi‑Fi Channel Scan**: Tests each channel (1‑13) by sending test packets to the Bridge and when done receive and set the best one.
+- **Pacing Auto‑tuning**: Adjusts the packet send rate based on the measured channel quality to minimize latency without overloading the link.
 
-### Future Features:
+**Automatic operations on Bridge:**
+- **UART Pin Scan**: Detects which GPIO pins are connected to the Pico's UART (with an handshake procedure).
+- **Pairing**: Listens for pairing requests from the Controller on a default channel and responds with its MAC address.
+- **Wifi Channel Synchronisation**: Once the Channel Scan is done, the Bridge switches to the best channel found and share the results with the Controller.
+- **Baudrate Selection**: If the baudrate is set to its default/automatic value in the Bridge.ino, it will automatically receive the value configured in the web configuration page of the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) addon, during the handshake phase.
+
+Complete parameter tables, valid value ranges, accepted UART baud rates, and the NVS storage layout used for caching discovery results: [Configuration Reference](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Configuration-Reference).
+
+## Documentation / Wiki
+
+This README covers the essentials. The project [**Wiki**](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki) is a full code-verified reference.
+
+| Page | Content |
+|---|---|
+| [Architecture Overview](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Architecture-Overview) | The three physical devices, end-to-end data flow, boot sequence of each sketch |
+| [Communication Protocol](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Communication-Protocol) | The `JSV2` packet format, CRC16, exact packet sizes |
+| [Pairing Process](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Pairing-Process) | The ESP-NOW discovery/handshake, manual and broadcast modes |
+| [Wi-Fi Channel Scan and Pacing](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/WiFi-Channel-Scan-and-Pacing) | The 13-channel quality scan and the auto-tuned packet pacing algorithm |
+| [Controller Pin Scan](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Controller-Pin-Scan) | The two-phase automatic GPIO classification (digital / analog / floating / unsafe / empty) |
+| [Bridge UART Discovery](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Bridge-UART-Discovery) | How the Bridge finds its UART pins and negotiates a baud rate with the Pico |
+| [Runtime Data Pipeline](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Runtime-Data-Pipeline) | The real-time sampling, buffering and transmission path on both boards |
+| [Configuration Reference](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Configuration-Reference) | Every manual/automatic parameter, valid values, and the NVS storage map |
+| [Hardware and Wiring](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Hardware-and-Wiring) | Tested hardware, GPIO/ADC constraints, wiring guidance |
+| [Installation and Setup](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Installation-and-Setup) | Full step-by-step setup with expected log output |
+| [Troubleshooting and Debugging](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Troubleshooting-and-Debugging) | Reading serial logs, common stuck states, forcing a clean re-scan |
+| [Technical Notes and Known Behavior](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Technical-Notes-and-Known-Behavior) | Code-verified edge cases and discrepancies between docs and implementation |
+| [Roadmap, Contributing and License](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Roadmap-Contributing-and-License) | Project status, planned features, contribution guidelines |
+
+## Roadmap
+
+- A **T-PicoC3** (Pico + ESP32-C3 on one board) is currently on the bench for a possible single-board Bridge variant.
 - Full GP2040-CE LCD support for the ESP32 Controller.
 - Full GP2040-CE LED support for the ESP32 Controller.
-- Expand the amounts of inputs.
-- Indipendent LCD support with features.
+- Expanding the number of supported inputs.
+- Independent LCD support with additional features.
 
-## License:
-This project is licensed under the MIT License – see the LICENSE file for details. 
+## Contributing
 
-## Credits:
-Author: Jamaica Sound
+Contributions are welcome — feel free to submit a Pull Request. See [Roadmap, Contributing and License](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Roadmap-Contributing-and-License) for suggested areas to start from.
 
-Inspired by and built upon the GP2040-CE project.
+## Support
 
-Uses the GP2040-CE-UART firmware for the Raspberry Pi Pico.
+For questions or issues, please [open an issue](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/issues) on the GitHub repository.
 
-## Contributing:
-Contributions are welcome! Please feel free to submit a Pull Request.
+## License
 
-## Support:
-For questions or issues, please open an issue on the GitHub repository.
+Licensed under the [MIT License](LICENSE).
+
+## Credits
+
+- **Author:** Jamaica Sound
+- Inspired by and built upon the [GP2040-CE](https://github.com/OpenStickCommunity/GP2040-CE) project
+- Uses the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) firmware fork for the Raspberry Pi Pico
