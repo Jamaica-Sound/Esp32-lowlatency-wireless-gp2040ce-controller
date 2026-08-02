@@ -97,30 +97,20 @@ void OnDataRecv(
     const esp_now_recv_info *info,
     const uint8_t *data,
     int len)
-{   
-    Serial.printf("[DEBUG RX] len=%d, first=0x%08X\n", len, ((uint32_t*)data)[0]);
-
+{
     if (wifiScanWaitingForBestChannel && len == sizeof(BestChannelPacket)) {
         wifiScanHandleBestChannel(data, len);
         return;
     }
-    
+
     if (channelScanActive && len == sizeof(AckPacket)) {
-    channelScanHandleAck(data, len);
-    return;
-    }
-    
-    if (len != sizeof(PairingPacket)) {
+        channelScanHandleAck(data, len);
         return;
     }
 
-    Serial.printf(
-    "[PAIR RX] len=%d tag=%s state=%d paired=%d\n",
-    len,
-    ((PairingPacket*)data)->tag,
-    state,
-    paired
-);
+    if (len != sizeof(PairingPacket)) {
+        return;
+    }
 
     PairingPacket *pkt = (PairingPacket*)data;
 

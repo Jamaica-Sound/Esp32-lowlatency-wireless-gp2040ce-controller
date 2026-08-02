@@ -44,8 +44,8 @@ static bool runtimeStarted = false;
 
 void setup() {
     Serial.begin(115200);
-    runPinScanIfNeeded();
     delay(500);
+    runPinScanIfNeeded();
     yield();
 
     pairingBegin();

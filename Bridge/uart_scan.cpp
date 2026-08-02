@@ -250,9 +250,6 @@ void performHandshake() {
 
 void uartScanBegin() {
 
-  Serial.begin(115200);
-  delay(2000);
-
   Serial.println();
   Serial.println("==================================");
   Serial.println("ESP32 UART Manual Discovery");

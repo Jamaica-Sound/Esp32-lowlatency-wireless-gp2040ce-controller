@@ -320,13 +320,10 @@ void runtimeLoop() {
 
         Serial.printf(
         "[STATS 5s] ESPNOW UART_RUNTIME_TX=%lu UART_CONFIG_TX=%lu MINFREE=%d\n",
-    (unsigned long)(rxNow - lastRuntimeRx),
     (unsigned long)(runtimeTxNow - lastRuntimeTx),
     (unsigned long)(configTxNow - lastConfigTx),
     minFreeTx
         );
-
-        lastRuntimeRx = rxNow;
         lastRuntimeTx = runtimeTxNow;
         lastConfigTx = configTxNow;
         lastPrint = now;

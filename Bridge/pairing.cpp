@@ -88,28 +88,30 @@ static void OnDataRecv(const esp_now_recv_info *info, const uint8_t *data, int l
     }
 
     PairingPacket *pkt = (PairingPacket*)data;
-    Serial.print("[Bridge] Received packet: ");
-    Serial.println(pkt->tag);
 
-    if (paired) return;
+    if (paired) {
+        bool sameMac = (memcmp(info->src_addr, peerMac, 6) == 0);
+        if (sameMac && (strcmp(pkt->tag, "JSP_CONF") == 0 || strcmp(pkt->tag, "JSP_DISC") == 0)) {
+            PairingPacket ack;
+            strlcpy(ack.tag, "JSP_ACK", sizeof(ack.tag));
+            esp_now_send(peerMac, (uint8_t*)&ack, sizeof(ack));
+        }
+        return;
+    }
 
     if (!paired && pairingState == STATE_DISC && strcmp(pkt->tag, "JSP_DISC") == 0) {
-        Serial.println("[Bridge] JSP_DISC received");
         memcpy(peerMac, info->src_addr, 6);
         addPeer(peerMac);
         PairingPacket resp;
         strlcpy(resp.tag, "JSP_RESP", sizeof(resp.tag));
         esp_now_send(peerMac, (uint8_t*)&resp, sizeof(resp));
-        Serial.println("[Bridge] JSP_RESP sent");
         pairingState = STATE_WAIT_ACK;
         phaseStart = millis();
         lastAction = 0;
     }
     else if (!paired && pairingState == STATE_WAIT_ACK && strcmp(pkt->tag, "JSP_CONF") == 0) {
-        Serial.println("[Bridge] JSP_CONF received");
         pendingAck = true;
         memcpy(pendingMac, peerMac, 6);
-        Serial.println("[Bridge] ACK queued");
     }
 }
 

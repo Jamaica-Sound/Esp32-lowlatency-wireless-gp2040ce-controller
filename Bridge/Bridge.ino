@@ -41,6 +41,11 @@ int8_t manualChannel = -1;
 static bool runtimeStarted = false;
 
 void setup() {
+    Serial.begin(115200);
+    delay(500);
+
+    Serial.println("Bridge starting...");
+
     if (manualUartRxPin < 0 || manualUartTxPin < 0) {
         runPinScanIfNeeded();
         Serial.println("ok pin scan");
@@ -79,6 +84,5 @@ void loop() {
     if (pairingReady()) {
         runtimeLoop();
     }
-
     yield();
 }
