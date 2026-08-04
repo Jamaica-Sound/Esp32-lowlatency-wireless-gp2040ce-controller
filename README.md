@@ -95,7 +95,7 @@ cd Esp32-lowlatency-wireless-gp2040ce-controller
 2. Open `Bridge/Bridge.ino`, same defaults, select board/port, upload.
 3. Power on the Bridge, then the Controller. Watch both serial monitors at **115200 baud**.
 4. On first boot, expect: a one-time pin scan and self-reboot on both boards, a UART handshake between the Bridge and the Pico, ESP-NOW pairing, and (once) a ~30–60 second Wi-Fi channel scan on the Controller. Subsequent boots skip all of this and reconnect immediately.
-5. Flash the Pico with [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART), and follow the instructions to configure it via the webconfigurator UART Input page.
+5. Flash the Pico with [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART), open its **UART Inputs Configuration** web page, set TX/RX Pin to match your wiring, and turn on **Auto-Handshake** — the Bridge's UART handshake in step 4 has nothing to do this without it, since it's off on the Pico by default.
 
 Full step-by-step walkthrough with expected log output at each stage: [Installation and Setup](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Installation-and-Setup).
 
@@ -122,10 +122,12 @@ Every manual/automatic switch lives as a constant at the top of the correspondin
 - **Pacing Auto‑tuning**: Adjusts the packet send rate based on the measured channel quality to minimize latency without overloading the link.
 
 **Automatic operations on Bridge:**
-- **UART Pin Scan**: Detects which GPIO pins are connected to the Pico's UART (with an handshake procedure).
+- **UART Pin Scan**: Detects which GPIO pins are connected to the Pico's UART (with an handshake procedure). This only finds anything if the Pico is actively probing for it — see the note under Configuration below.
 - **Pairing**: Listens for pairing requests from the Controller on a default channel and responds with its MAC address.
 - **Wifi Channel Synchronisation**: Once the Channel Scan is done, the Bridge switches to the best channel found and share the results with the Controller.
 - **Baudrate Selection**: If the baudrate is set to its default/automatic value in the Bridge.ino, it will automatically receive the value configured in the web configuration page of the [GP2040-CE-UART](https://github.com/Jamaica-Sound/GP2040-CE-UART) addon, during the handshake phase.
+
+> **Note:** the Bridge's automatic UART pin scan and handshake only has something to find if the Pico's own **Auto-Handshake** switch is turned on in its **UART Inputs Configuration** web page (it's off by default) — with it off, the Pico opens its UART directly in "trust mode" and never participates in the discovery/handshake exchange described above. If you'd rather not touch that setting, set `manualUartTxPin`/`manualUartRxPin`/`manualUartBaud` on the Bridge to fixed values matching the Pico's own configuration instead. Full details: [Bridge UART Discovery](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Bridge-UART-Discovery#the-pico-side-of-this-exchange--and-why-it-matters-here).
 
 Complete parameter tables, valid value ranges, accepted UART baud rates, and the NVS storage layout used for caching discovery results: [Configuration Reference](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Configuration-Reference).
 
