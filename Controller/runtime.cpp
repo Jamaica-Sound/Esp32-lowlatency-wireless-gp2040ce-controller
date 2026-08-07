@@ -258,7 +258,7 @@ void runtimeLoop() {
             }
         }
         for (int i = 0; i < validAnalogCount; i++) {
-            writeBuf->analogValues[i] = adcLatest[i] << 4;
+            writeBuf->analogValues[i] = adcLatest[i];
         }
         writeBuf->validAnalogCount = validAnalogCount;
         memcpy(writeBuf->validAnalogPins, validAnalogPins, validAnalogCount);

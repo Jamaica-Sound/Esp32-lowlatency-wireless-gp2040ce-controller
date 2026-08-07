@@ -61,6 +61,24 @@ The configuration packets are sent every second just to be sure that it is recei
 
 A good runtime packet rate with a paired MAC address (not broadcast) is 800pkt/s - 1 every 1.25ms, but **the rate can be 1.5 times faster if broadcast MAC is used.**
 
+### Available Baud Rates
+
+| Baudrate (bps) |
+|----------------------------------------------------------------------------------------------------------|
+| 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600, 1500000, 2000000, 3000000, 4000000 |
+
+### Some Controller Examples (Maximuim packets per second for All Inputs. Full table at [Communication Protocol](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Communication-Protocol))
+
+| # | Device / Configuration | Digital Inputs (total) | Analog Axes (total) | Packet Size (bytes) | Pkt/s at 115200 | Pkt/s at 230400 | Pkt/s at 460800 | Pkt/s at 921600 | Pkt/s at 1500000 | Pkt/s at 2000000 | Pkt/s at 3000000 | Pkt/s at 4000000 |
+|---|------------------------|---------------|-------------|---------------------|--------|--------|--------|--------|------|------|------|------|
+| 1 | NES Controller (D-pad + A/B + Start/Select) | 8 | 0 | 13 | 886 | 1,772 | 3,545 | 7,089 | 11,538 | 15,385 | 23,077 | 30,769 |
+| 2 | PlayStation 3/4 (20 buttons + 2 sticks + 2 triggers → 6 axes) | 20 | 6 | 25 | 461 | 922 | 1,843 | 3,686 | 6,000 | 8,000 | 12,000 | 16,000 |
+| 3 | Standard Fightstick (8 action buttons + D-pad 4 + Start/Select → 14 dig.) | 14 | 0 | 13 | 886 | 1,772 | 3,545 | 7,089 | 11,538 | 15,385 | 23,077 | 30,769 |
+| 4 | Leverless Fightstick (Hitbox style, 20 dig., 0 axes) | 20 | 0 | 13 | 886 | 1,772 | 3,545 | 7,089 | 11,538 | 15,385 | 23,077 | 30,769 |
+| 5 | Arcade Stick 1 Player (digital joystick + 12 buttons + spinner + trackball + Start/Coin + 4 buttons macros,menu,volume+- → 28 dig. total) | 28 | 0 | 13 | 886 | 1,772 | 3,545 | 7,089 | 11,538 | 15,385 | 23,077 | 30,769 |
+| 6 | Arcade Cabinet 2 Players (2 digital joysticks + 6 buttons each + Start/Coin each → 24 dig. total) | 24 | 0 | 13 | 886 | 1,772 | 3,545 | 7,089 | 11,538 | 15,385 | 23,077 | 30,769 |
+| 7 | Maximum Possible Configuration (64 digital inputs + 8 analog axes) | 64 | 8 | 29 | 397 | 794 | 1,589 | 3,178 | 5,172 | 6,897 | 10,345 | 13,793 |
+
 ## Key Characteristics
 
 - **Custom low-overhead binary protocol (`JSV2`)** over ESP-NOW — a compact configuration packet (pin layout) plus a compact runtime packet (input state), both CRC16-protected, sized dynamically to the number of inputs actually in use (as few as ~20 bytes for a typical layout). Full byte-level breakdown in the [Communication Protocol](https://github.com/Jamaica-Sound/Esp32-lowlatency-wireless-gp2040ce-controller/wiki/Communication-Protocol) wiki page.
