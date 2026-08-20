@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_timer.h"
+#include "latency_test.h"
 
 #define MAX_PINS 64
 #define NVS_NAMESPACE "pin_scanner"
@@ -20,6 +21,7 @@ Preferences runtimePrefs;
 
 uint8_t digitalPins[64];
 uint8_t analogPins[MAX_PINS];
+bool rotaryFlags[MAX_PINS] = {0};
 
 uint8_t digitalCount = 0;
 uint8_t analogCount = 0;
@@ -59,6 +61,8 @@ volatile uint32_t packetCounter = 0;
 static void txTask(void *pvParameters);
 static void pacingCallback(void *arg);
 
+volatile uint32_t ackCounter = 0;
+
 adc_channel_t gpioToAdcChannel(uint8_t pin) {
     switch (pin) {
         case 1:  return ADC_CHANNEL_0;
@@ -84,8 +88,54 @@ void loadRuntimeLists() {
     runtimePrefs.end();
 }
 
+static void appendManualRotaryPins() {
+    if (manualRotaryPins == nullptr || manualRotaryPins[0] == '\0') {
+        return;
+    }
+
+    char buffer[256];
+    strncpy(buffer, manualRotaryPins, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+
+    char* token = strtok(buffer, ",");
+
+    while (token != nullptr) {
+        int pin = atoi(token);
+
+        if (pin >= 0 && pin < 64) {
+            int existingIndex = -1;
+
+            for (int i = 0; i < digitalCount; i++) {
+                if (digitalPins[i] == (uint8_t)pin) {
+                    existingIndex = i;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0) {
+                rotaryFlags[existingIndex] = true;
+            } else if (digitalCount < MAX_PINS) {
+                digitalPins[digitalCount] = (uint8_t)pin;
+                rotaryFlags[digitalCount] = true;
+                digitalCount++;
+            }
+        }
+
+        token = strtok(nullptr, ",");
+    }
+}
+
+static void onDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
+    if (status == ESP_NOW_SEND_SUCCESS) {
+        ackCounter++;
+    }
+}
+
 bool runtimeInit() {
     loadRuntimeLists();
+
+    memset(rotaryFlags, 0, sizeof(rotaryFlags));
+    appendManualRotaryPins();
 
     for (int i = 0; i < digitalCount; i++) {
         pinMode(digitalPins[i], INPUT_PULLUP);
@@ -174,6 +224,8 @@ memcpy(
     sizeof(uint16_t)
 );
 
+    esp_now_register_send_cb(onDataSent);
+
     txSemaphore = xSemaphoreCreateBinary();
 
     esp_timer_create_args_t timerArgs = {
@@ -186,13 +238,13 @@ memcpy(
     uint32_t periodo_us;
     if (manualPacingUs > 0) {
         periodo_us = manualPacingUs;
-        Serial.printf("[RUNTIME] Usa pacing manuale: %d µs\n", periodo_us);
+        Serial.printf("[RUNTIME] Using manual pacing: %d µs\n", periodo_us);
     } else {
     Preferences prefs;
     prefs.begin("espnow", true);
     periodo_us = prefs.getUInt("pacing_us", 1250);
     prefs.end();
-    Serial.printf("[RUNTIME] Periodo pacing: %d µs\n", periodo_us);
+    Serial.printf("[RUNTIME] Pacing period: %d µs\n", periodo_us);
             }
     
     esp_timer_start_periodic(pacingTimer, periodo_us);
@@ -224,16 +276,23 @@ void runtimeLoop() {
         } else {
             level = (gpioHigh >> (pin - 32)) & 1;
         }
+
         bool pressed = !level;
 
-        debounceState[i] = ((debounceState[i] << 1) | pressed) & 0x0F;
-        if (debounceState[i] == 0x0F) {
-            stableDigital[i] = 1;
-        } else if (debounceState[i] == 0x00) {
-            stableDigital[i] = 0;
-        }
-        if (stableDigital[i]) {
-            bits |= (1ULL << i);
+        if (rotaryFlags[i]) {
+            if (pressed) {
+                bits |= (1ULL << i);
+            }
+        } else {
+            debounceState[i] = ((debounceState[i] << 1) | pressed) & 0x0F;
+            if (debounceState[i] == 0x0F) {
+                stableDigital[i] = 1;
+            } else if (debounceState[i] == 0x00) {
+                stableDigital[i] = 0;
+            }
+            if (stableDigital[i]) {
+                bits |= (1ULL << i);
+            }
         }
     }
     
@@ -274,13 +333,29 @@ void runtimeLoop() {
     static unsigned long lastDebugPrint = 0;
     static uint32_t lastPacketCounter = 0;
     unsigned long nowDbg = millis();
+    static uint32_t lastAckCounter = 0;
+    
     if (nowDbg - lastDebugPrint >= 5000) {
-        uint32_t count = packetCounter;
-        Serial.print("TX rate: ");
-        Serial.print((count - lastPacketCounter) / 5);
-        Serial.println(" pkt/s");
-        lastPacketCounter = count;
-        lastDebugPrint = nowDbg;
+    uint32_t count = packetCounter;
+    uint32_t ack = ackCounter;
+    uint32_t packetsLastInterval = count - lastPacketCounter;
+    uint32_t ackLastInterval = ack - lastAckCounter;
+
+    Serial.print("TX rate: ");
+    Serial.print(packetsLastInterval / 5);
+    Serial.print(" pkt/s, ACKs: ");
+    Serial.print(ackLastInterval / 5);
+    Serial.print(" (ACK rate: ");
+    if (packetsLastInterval > 0) {
+        Serial.print((float)ackLastInterval / packetsLastInterval * 100.0f);
+    } else {
+        Serial.print("0.00");
+    }
+    Serial.println("%)");
+
+    lastPacketCounter = count;
+    lastAckCounter = ack;
+    lastDebugPrint = nowDbg;
     }
 }
 
@@ -295,6 +370,7 @@ static void txTask(void *pvParameters) {
 
     while (1) {
         if (xSemaphoreTake(txSemaphore, portMAX_DELAY) == pdTRUE) {
+
             portENTER_CRITICAL(&bufferMux);
             runtime_shared_t *readBuf = &sharedBuffers[currentReadBuffer];
             uint64_t digitalBits = readBuf->digitalBits;

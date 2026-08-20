@@ -2,16 +2,21 @@
 #include "pairing.h"
 #include "wifi_scan.h"
 #include "runtime.h"
+#include "latency_test.h"
 
 // ============================================================
 //  MANUAL PIN CONFIGURATION
 //  - Leave empty "" to let the system run the automatic scan.
 //  - Fill with pin numbers to bypass the scan.
+//  - manualRotaryPins is designed for Rotary Encoders, but any 
+//    digital pin listed will bypass the debounce logic.
 //  - Example: const char* manualDigitalPins = "13,14,15,16,17,18,20,24,34,56".
 //  - Example: const char* manualAnalogPins = "0,1,2,3,4,5".
+//  - Example: const char* manualRotaryPins = "19,20,21,22".
 // ============================================================
 const char* manualDigitalPins = "";
 const char* manualAnalogPins = "";
+const char* manualRotaryPins = "";
 
 // ==========================================================================
 //  MANUAL MAC ADDRESS CONFIGURATION
@@ -38,13 +43,24 @@ uint8_t manualPeerMac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 int8_t manualChannel = -1;
 uint32_t manualPacingUs = 0;
 uint32_t testDurationMs = 1500;
-uint32_t pktIntervalUs = 500;
+uint32_t pktIntervalUs = 200;
+
+// ===============================================================================================
+//  MANUAL LATENCY TEST CONFIGURATION
+//  - enableLatencyTest = true: enables the background latency test
+//  - enableLatencyTest = false: completely disables the latency test
+//  - latencyPacketsPerSecond = number of latency packets to be sent in one second (e.g., 50)
+// ===============================================================================================
+bool enableLatencyTest = false;
+uint32_t latencyPacketsPerSecond = 50;
+
 
 static bool runtimeStarted = false;
 
 void setup() {
     Serial.begin(115200);
     delay(500);
+    btStop();
     runPinScanIfNeeded();
     yield();
 
@@ -58,10 +74,13 @@ void loop() {
         channelSelectOrApply();
 
         runtimeInit();
+        latencyTestInit();
+        latencyTestStart();
         runtimeStarted = true;
     }
 
     if (pairingReady()) {
         runtimeLoop();
+        latencyTestLoopInject();
     }
 }

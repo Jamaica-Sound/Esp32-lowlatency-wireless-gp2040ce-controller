@@ -3,6 +3,7 @@
 #include "pairing.h"
 #include "wifi_scan.h"
 #include "runtime.h"
+#include "latency_test.h"
 
 // ============================================================
 //  MANUAL UART PIN CONFIGURATION
@@ -17,7 +18,7 @@
 //    During an active handshake, the baudrate sent by the Pico
 //    always takes precedence.
 //  - Valid Bauds are: 9600,19200,38400,57600,115200,230400,
-//    460800,921600,1000000,1500000,2000000,3000000,4000000.
+//    460800,921600,1500000,2000000,3000000,4000000.
 // ============================================================
 int manualUartTxPin = -1;
 int manualUartRxPin = -1;
@@ -35,16 +36,34 @@ int manualUartBaud = -1;
 //  - manualChannel = 0 = uses the default discovery channel (1) everywhere
 //  - manualChannel = 1 to 13 = set the manual channel (pairing stays on 1, runtime uses this)
 // ============================================================
-uint8_t manualPeerMac[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+uint8_t manualPeerMac[6] = {0x00,0x00,0x00,0x00,0x00,0x00};
 int8_t manualChannel = -1;
+
+// ===============================================================================================
+//  MANUAL LATENCY TEST CONFIGURATION
+//  - enableLatencyTest = true: enables the background latency test with pong reply
+//  - enableLatencyTest = false: completely disables the latency test on the bridge side
+// ===============================================================================================
+bool enableLatencyTest = false;
+
+// ============================================================
+//  MANUAL T-PICOC3 CONFIGURATION
+//  - By default (0), the code assumes a generic ESP32.
+//  - Set to 1 to enable T-PicoC3 mode, which restricts ADC
+//    availability to GPIO2 only (the only ADC pin exposed
+//    on the T-PicoC3's ESP32-C3).
+//  - Note: This setting affects ADC pin mapping and channel
+//    configuration for analog readings.
+// ============================================================
+#define TPICOC3_MODE 0   // 0 = generic ESP32, 1 = T-PicoC3
 
 static bool runtimeStarted = false;
 
 void setup() {
     Serial.begin(115200);
     delay(500);
-
     Serial.println("Bridge starting...");
+    btStop();
 
     if (manualUartRxPin < 0 || manualUartTxPin < 0) {
         runPinScanIfNeeded();
@@ -59,8 +78,7 @@ void setup() {
         yield();
     }
     Serial.println("UART OK");
-
-
+    
     pairingBegin();
     Serial.println("DEBUG: pairingBegin completed");
 }
@@ -71,7 +89,7 @@ void loop() {
     wifiScanLoop();
 
     if (pairingReady() && !runtimeStarted) {
-    uint8_t chosenChannel = wifiChannelSelectOrApply();
+        uint8_t chosenChannel = wifiChannelSelectOrApply();
         if (chosenChannel > 0) {
             Serial.println("DEBUG: calling runtimeInit");
             if (runtimeInit()) {

@@ -122,6 +122,8 @@ void pairingBegin() {
     delay(100);
     esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
     delay(10);
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M); 
     if (esp_now_init() != ESP_OK) {
         Serial.println("ESP-NOW init failed");
         return;

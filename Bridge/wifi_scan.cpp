@@ -28,7 +28,7 @@ static bool bestChannelConfirmed = false;
 
 void updatePeerChannel(uint8_t *mac, uint8_t channel) {
     esp_now_del_peer(mac);
-    delay(20);
+    delay(30);
     esp_now_peer_info_t peerInfo;
     memset(&peerInfo, 0, sizeof(peerInfo));
     memcpy(peerInfo.peer_addr, mac, 6);
@@ -39,6 +39,8 @@ void updatePeerChannel(uint8_t *mac, uint8_t channel) {
     if (err != ESP_OK) {
         Serial.printf("Error adding peer on channel %d: %d\n", channel, err);
     }
+    delay(30);
+    esp_wifi_set_ps(WIFI_PS_NONE); 
     delay(20);
 }
 
@@ -126,6 +128,9 @@ void wifiScanRecv(const esp_now_recv_info *info, const uint8_t *data, int len) {
             updatePeerChannel(peerMac, newChannel);
             delay(50);
 
+            esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+            delay(20); 
+            
             packetsReceived[newChannel] = 0;
             currentTestChannel = newChannel;
             countingActive = true;
@@ -147,7 +152,8 @@ void wifiScanHandleAck(const uint8_t *data, int len) {
 void wifiScanLoop() {
     if (countingActive && millis() >= testEndTime) {
         countingActive = false;
-        delay(500);
+        esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
+        delay(20);
         Serial.flush();
         if (!rankingPrinted) {
             printChannelResult(currentTestChannel);
@@ -186,11 +192,20 @@ void wifiScanLoop() {
                 prefs.end();
                 Serial.printf("[WIFI-Bridge] Channel %d saved to NVS\n", bestChannelToSend);
                 wifiScanComplete = true;
+                esp_wifi_set_ps(WIFI_PS_NONE);
+                esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+                Serial.println("[RADIO] 54M rate applied.");
+                delay(100);
+
             } else {
                 Serial.println("[WIFI-Bridge] ACK timeout; retrying...");
                 esp_now_send(peerMac, (uint8_t*)&bestPkt, sizeof(bestPkt));
                 delay(500);
                 wifiScanComplete = true;
+                esp_wifi_set_ps(WIFI_PS_NONE);
+                esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+                Serial.println("[RADIO] 54M rate applied post-timeout.");
+                delay(100);
             }
         }
     }
@@ -217,6 +232,10 @@ uint8_t wifiChannelSelectOrApply() {
             peerInfo.encrypt = false;
             peerInfo.ifidx = WIFI_IF_STA;
             esp_now_add_peer(&peerInfo);
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+            delay(100);
+
         }
         return ch;
     }
@@ -240,6 +259,10 @@ uint8_t wifiChannelSelectOrApply() {
             peerInfo.encrypt = false;
             peerInfo.ifidx = WIFI_IF_STA;
             esp_now_add_peer(&peerInfo);
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+            delay(100);
+
         }
         return 1;
     }

@@ -10,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/uart.h"
+#include "latency_test.h"
 
 TaskHandle_t uartTaskHandle = nullptr;
 
@@ -32,7 +33,7 @@ uint32_t uartBaud = 0;
 
 portMUX_TYPE runtimeMux = portMUX_INITIALIZER_UNLOCKED;
 
-HardwareSerial& picoUart = Serial2;
+HardwareSerial& picoUart = Serial1;
 
 void setupRuntimeUart(
     int rxPin,
@@ -42,8 +43,8 @@ void setupRuntimeUart(
 {
     picoUart.end();
 
-    picoUart.setRxBufferSize(2048);
-    picoUart.setTxBufferSize(2048);
+    picoUart.setRxBufferSize(4096);
+    picoUart.setTxBufferSize(4096);
 
     picoUart.begin(
         baud,
@@ -52,7 +53,7 @@ void setupRuntimeUart(
         txPin
     );
 
-    uart_port_t uart = UART_NUM_2;
+    uart_port_t uart = UART_NUM_1;
 
     uart_set_baudrate(
         uart,
@@ -105,7 +106,12 @@ void runtimeEspNowRecv(
     return;
     }
     
-
+    // === LATENCY INTERCEPTION INJECTION ===
+    if (latencyTestHandleRecv(info, data, len)) {
+        return; // Returns immediately, the packet was a latency packet and has been resent to the sender
+    }
+    // ============================================
+    
   uint16_t sync;
 
     memcpy(
@@ -300,7 +306,11 @@ void runtimeStart() {
         NULL,
         configMAX_PRIORITIES - 1,
         &uartTaskHandle,
+    #if CONFIG_FREERTOS_UNICORE
+        0
+    #else
         1
+    #endif
     );
 }
 

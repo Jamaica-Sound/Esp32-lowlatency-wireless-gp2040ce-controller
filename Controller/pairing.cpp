@@ -146,33 +146,22 @@ bool isPaired() {
 
 void pairingBegin() {
     Serial.println("\n=== PAIRING ===");
-    Serial.println("PAIR 1");
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);
-    Serial.println("PAIR 2");
+    esp_wifi_set_ps(WIFI_PS_NONE);
     WiFi.disconnect(true, true);
-    Serial.println("PAIR 3");
     delay(100);
     yield();
-    Serial.println("PAIR 4");
     esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-    Serial.println("PAIR 5");
-
+    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M); 
     if (esp_now_init() != ESP_OK) {
 
         Serial.println("ESP-NOW init failed");
         return;
     }
 
-    Serial.println("PAIR 6");
-
     addPeer(broadcast);
 
-    Serial.println("PAIR 7");
-
     esp_now_register_recv_cb(OnDataRecv);
-
-    Serial.println("PAIR 8");
 
     bool isManual = false;
     for (int i = 0; i < 6; i++) {

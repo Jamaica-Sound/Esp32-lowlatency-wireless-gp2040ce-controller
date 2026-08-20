@@ -71,11 +71,11 @@ static void sendEndCommand() {
     end.magic = 0xDEADBEEF;
     end.newChannel = 0;
     end.testDuration = 0;
-    for (int i = 0; i < 5; i++) {
+    // for (int i = 0; i < 5; i++) {
         esp_now_send(peerMac, (uint8_t*)&end, sizeof(end));
         delay(50);
-    }
-    Serial.println("[SCAN] Comando fine test inviato.");
+    // }
+    Serial.println("[SCAN] End-of-test command sent.");
 }
 
 void channelScanHandleAck(const uint8_t *data, int len) {
@@ -120,6 +120,7 @@ static void updatePeerChannel(uint8_t *mac, uint8_t channel) {
     if (err != ESP_OK) {
         Serial.printf("[SCAN] Error adding peer on channel %d: %d\n", channel, err);
     }
+    esp_wifi_set_ps(WIFI_PS_NONE); 
     delay(20);
 }
 
@@ -129,6 +130,9 @@ static TestResult testChannel(uint8_t channel) {
 
     Serial.printf("[SCAN] Testing channel %d...\n", channel);
 
+    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
+    delay(50);
+
     if (!sendSyncAndWaitAck(channel)) {
         return result;
     }
@@ -137,6 +141,8 @@ static TestResult testChannel(uint8_t channel) {
     delay(50);
     updatePeerChannel(peerMac, channel);
     delay(150);
+    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+    delay(100);
 
     ackCount = 0;
     sentCount = 0;
@@ -166,6 +172,10 @@ static TestResult testChannel(uint8_t channel) {
     result.score = (float)ackCount * 1000 / testDurationMs;
 
     Serial.printf("[SCAN] Channel %d: sent %d, ACK %d\n", channel, result.sent, result.acked);
+
+    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
+    delay(20);
+
     return result;
 }
 
@@ -222,6 +232,12 @@ uint8_t channelScanStart() {
     prefs.putUChar("best_channel", best);
     prefs.end();
 
+    esp_wifi_set_ps(WIFI_PS_NONE); 
+    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+
+    Serial.println("[RADIO] Hardware configuration set to MAX SPEED for 800Hz gameplay.");
+    delay(100);
+   
     return best;
 }
 
@@ -246,6 +262,9 @@ uint8_t channelSelectOrApply() {
             peerInfo.encrypt = false;
             peerInfo.ifidx = WIFI_IF_STA;
             esp_now_add_peer(&peerInfo);
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+            delay(100);
         }
         return ch;
     }
@@ -269,6 +288,9 @@ uint8_t channelSelectOrApply() {
             peerInfo.encrypt = false;
             peerInfo.ifidx = WIFI_IF_STA;
             esp_now_add_peer(&peerInfo);
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+            delay(100);
         }
         return 1;
     }
@@ -299,6 +321,9 @@ uint8_t channelSelectOrApply() {
             peerInfo.encrypt = false;
             peerInfo.ifidx = WIFI_IF_STA;
             esp_now_add_peer(&peerInfo);
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+            delay(100);
         }
         return ch;
     }
@@ -327,6 +352,9 @@ uint8_t channelSelectOrApply() {
             peerInfo.encrypt = false;
             peerInfo.ifidx = WIFI_IF_STA;
             esp_now_add_peer(&peerInfo);
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+            delay(100);
         }
         return best;
     }
@@ -349,6 +377,9 @@ uint8_t channelSelectOrApply() {
         peerInfo.encrypt = false;
         peerInfo.ifidx = WIFI_IF_STA;
         esp_now_add_peer(&peerInfo);
+        esp_wifi_set_ps(WIFI_PS_NONE);
+        esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_54M);
+        delay(100);
     }
     return 1;
 }

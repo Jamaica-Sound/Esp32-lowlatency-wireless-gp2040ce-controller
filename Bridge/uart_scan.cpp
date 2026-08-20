@@ -139,11 +139,11 @@ bool receivePattern(int pin, uint8_t expected1, uint8_t expected2, uint32_t baud
 void performHandshake() {
     Serial.println();
     Serial.println("=== FINAL UART HANDSHAKE ===");
-    Serial.printf("Starting Serial2 RX=%d TX=%d\n", rxEsp, txEsp);
+    Serial.printf("Starting Serial1 RX=%d TX=%d\n", rxEsp, txEsp);
 
-    Serial2.begin(FIXED_BAUD, SERIAL_8N1, rxEsp, txEsp);
+    Serial1.begin(FIXED_BAUD, SERIAL_8N1, rxEsp, txEsp);
     delay(100);
-    Serial2.setTimeout(50);
+    Serial1.setTimeout(50);
 
     String msg = "";
     unsigned long startWait = millis();
@@ -152,11 +152,11 @@ void performHandshake() {
     while (millis() - startWait < 3000) {
         if (millis() - lastOk > 100) {
             Serial.println("Sending OK");
-            Serial2.println("OK");
+            Serial1.println("OK");
             lastOk = millis();
         }
-        if (Serial2.available()) {
-            msg = Serial2.readStringUntil('\n');
+        if (Serial1.available()) {
+            msg = Serial1.readStringUntil('\n');
             msg.trim();
             Serial.printf("RX MSG: [%s]\n", msg.c_str());
             if (msg == "handshake finale") {
@@ -169,21 +169,21 @@ void performHandshake() {
 
     if (msg == "handshake finale") {
         Serial.println("Sending handshake OK");
-        Serial2.println("Handshake ok");
+        Serial1.println("Handshake ok");
         delay(50);
-        msg = Serial2.readStringUntil('\n');
+        msg = Serial1.readStringUntil('\n');
         msg.trim();
         Serial.printf("Received second msg: [%s]\n", msg.c_str());
 
         if (msg == "trusted") {
             Serial.println("Sending trusted");
-            Serial2.println("trusted");
+            Serial1.println("trusted");
 
             String baudCmd = "";
             unsigned long baudStart = millis();
             while (millis() - baudStart < 1000) {
-                if (Serial2.available()) {
-                    baudCmd = Serial2.readStringUntil('\n');
+                if (Serial1.available()) {
+                    baudCmd = Serial1.readStringUntil('\n');
                     baudCmd.trim();
                     break;
                 }
@@ -199,20 +199,20 @@ void performHandshake() {
                 }
                 if (!valid) {
                     Serial.println("Invalid baudrate, sending unknown");
-                    Serial2.println("baudrate unknown");
+                    Serial1.println("baudrate unknown");
                     handshakeDone = false;
-                    Serial2.end();
+                    Serial1.end();
                     return;
                 }
 
                 Serial.printf("Switching to baudrate: %d\n", newBaud);
                 unsigned long ackStart = millis();
                 while (millis() - ackStart < 500) {
-                    Serial2.println("baudrate received");
+                    Serial1.println("baudrate received");
                     delay(50);
                 }
-                Serial2.end();
-                Serial2.begin(newBaud, SERIAL_8N1, rxEsp, txEsp);
+                Serial1.end();
+                Serial1.begin(newBaud, SERIAL_8N1, rxEsp, txEsp);
                 uartBaud = newBaud;
 
                 Preferences prefsCfg;
@@ -228,20 +228,20 @@ void performHandshake() {
                 Serial.println("No BAUD command, handshake failed");
                 rxEsp = -1;
                 txEsp = -1;
-                Serial2.end();
+                Serial1.end();
                 handshakeDone = false;
                 return;
             }
         } else {
             Serial.println("Handshake failed during TRUSTED phase");
             handshakeDone = false;
-            Serial2.end();
+            Serial1.end();
             return;
         }
     } else {
         Serial.println("Handshake failed waiting FINAL");
         handshakeDone = false;
-        Serial2.end();
+        Serial1.end();
         return;
     }
 
@@ -328,7 +328,7 @@ void uartScanBegin() {
     Serial.println("RX/TX found, but baud is missing.");
     Serial.println("Entering SKIP_DISCOVERY mode.");
 
-    Serial2.begin(FIXED_BAUD, SERIAL_8N1, rxEsp, txEsp);
+    Serial1.begin(FIXED_BAUD, SERIAL_8N1, rxEsp, txEsp);
 
     unsigned long start = millis();
     unsigned long lastSkip = 0;
@@ -337,13 +337,13 @@ void uartScanBegin() {
     {
         if (millis() - lastSkip > 100)
         {
-            Serial2.println("SKIP_DISCOVERY");
+            Serial1.println("SKIP_DISCOVERY");
             lastSkip = millis();
         }
 
-        if (Serial2.available())
+        if (Serial1.available())
         {
-            String msg = Serial2.readStringUntil('\n');
+            String msg = Serial1.readStringUntil('\n');
             msg.trim();
 
             if (msg == "handshake finale")
@@ -360,9 +360,9 @@ void uartScanBegin() {
   }
 
   if (handshakeDone) {
-    Serial2.end();
+    Serial1.end();
     delay(10);
-    Serial2.begin(FIXED_BAUD, SERIAL_8N1, rxEsp, txEsp);
+    Serial1.begin(FIXED_BAUD, SERIAL_8N1, rxEsp, txEsp);
     delay(100);
 
     Serial.println("Sending SKIP_DISCOVERY to the Pico...");
@@ -373,14 +373,14 @@ void uartScanBegin() {
   {
     if (millis() - lastSkip > 100)
     {
-        Serial2.println("SKIP_DISCOVERY");
+        Serial1.println("SKIP_DISCOVERY");
         lastSkip = millis();
     }
 
-    if (Serial2.available())
+    if (Serial1.available())
     {
         String confirmMsg =
-            Serial2.readStringUntil('\n');
+            Serial1.readStringUntil('\n');
 
         confirmMsg.trim();
 
@@ -406,8 +406,8 @@ void uartScanLoop() {
     }
 
     static uint8_t prevByte = 0;
-    while (Serial2.available()) {
-        uint8_t data = Serial2.read();
+    while (Serial1.available()) {
+        uint8_t data = Serial1.read();
         Serial.printf("[RX] 0x%02X", data);
         if (data >= 32 && data <= 126) Serial.printf(" ('%c')", data);
         Serial.println();
@@ -418,7 +418,7 @@ void uartScanLoop() {
             checkPending = false;
             rxEsp = -1;
             txEsp = -1;
-            Serial2.end();
+            Serial1.end();
             return;
         }
         prevByte = data;

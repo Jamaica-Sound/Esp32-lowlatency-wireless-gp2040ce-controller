@@ -21,6 +21,10 @@ const char* KEY_ANALOG_COUNT  = "anaCount";
 const char* KEY_DIGITAL_LIST  = "digList";
 const char* KEY_ANALOG_LIST   = "anaList";
 
+// Global variable to store valid ADC1 pins
+int adc1_pins[20]; // Maximum 14 for ESP32-P4
+int adc1_pin_count = 0;
+
 uint64_t scannedMask = 0;
 int currentPin = -1;
 uint8_t phase = 0;
@@ -46,11 +50,84 @@ struct PinResult {
   int retries;
 };
 
+bool isTPicoC3() {
+    #if TPICOC3_MODE
+        return true;
+    #else
+        return false;
+    #endif
+}
+
+void detectAdcPins() {
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    // Original ESP32
+    int pins[] = {32, 33, 34, 35, 36, 37, 38, 39};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
+    // ESP32-S2 and ESP32-S3
+    int pins[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif defined(CONFIG_IDF_TARGET_ESP32C2)
+    // ESP32-C2
+    int pins[] = {0, 1, 2, 3, 4};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif TPICOC3_MODE
+    // T-PicoC3: Only GPIO2 is available as ADC
+    int pins[] = {2};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+    // ESP32-C3
+    int pins[] = {0, 1, 2, 3, 4};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif defined(CONFIG_IDF_TARGET_ESP32C5)
+    // ESP32-C5
+    int pins[] = {1, 2, 3, 4, 5, 6};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+    // ESP32-C6
+    int pins[] = {0, 1, 2, 3, 4};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif defined(CONFIG_IDF_TARGET_ESP32H2)
+    // ESP32-H2
+    int pins[] = {1, 2, 3, 4, 5};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif defined(CONFIG_IDF_TARGET_ESP32P4)
+    // ESP32-P4
+    int pins[] = {16, 17, 18, 19, 20, 21, 22, 23, 49, 50, 51, 52, 53, 54};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#elif defined(ESP8266)
+    // ESP8266
+    int pins[] = {17}; // A0 = GPIO17
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#else
+    // Unrecognized model: use a minimal safe set
+    int pins[] = {0, 1, 2, 3, 4};
+    adc1_pin_count = sizeof(pins) / sizeof(pins[0]);
+    memcpy(adc1_pins, pins, sizeof(pins));
+#endif
+}
+
 PinResult results[MAX_PINS];
 uint64_t usableMask = 0, analogMask = 0;
 
 bool isAnalogReadable(int pin) {
-  return (pin >= 0 && pin <= 39);
+    // Checks if the pin is in the list of valid ADC1 pins for this model
+    for (int i = 0; i < adc1_pin_count; i++) {
+        if (adc1_pins[i] == pin) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool safeAnalogRead(int pin, int &value) {
@@ -384,7 +461,12 @@ void buildRuntimeLists() {
 
 void runPinScanIfNeeded() {
   delay(1500);
-  analogReadResolution(12);
+  #if defined(ESP8266)
+    analogReadResolution(10);
+  #else
+    analogReadResolution(12);
+  #endif
+  detectAdcPins();
   Serial.println("\nESP32 SCANNER WITH TWO-PHASE PULL TEST\n");
 
   prefs.begin(NVS_NAMESPACE, false);
